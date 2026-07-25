@@ -3,13 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
+
 from . import models
-from .database import engine, get_db
+from .database import engine, get_db, Base
 
 # Inicializar seguridad de contraseñas con Bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-models.Base.metadata.create_all(bind=engine)
+# Crear tablas usando la Base importada directamente
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Multimakina Cloud Secure API", version="2.5")
 
