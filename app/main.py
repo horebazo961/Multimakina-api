@@ -1,13 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy import Column, Integer, String, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import os
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres.ditabcbswzrwmkeudspu:k9Navzh42qmeX6-@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
+    "postgresql://postgres.ditabcbswzrwmkeudspu:CONTRASEÑA_REAL@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
 )
 
 engine = create_engine(DATABASE_URL)
@@ -22,10 +22,18 @@ class VehicleModel(Base):
     model = Column(String, index=True)
     vin = Column(String, unique=True, index=True)
     status = Column(String, default="Diagnóstico")
-    maintenance_type = Column(String, default="Preventivo") # Nuevo campo
+    maintenance_type = Column(String, default="Preventivo")
     taller_propietario = Column(String, default="Taller Central")
 
+# Crear tablas y asegurar columnas nuevas en Supabase
 Base.metadata.create_all(bind=engine)
+with engine.connect() as connection:
+    try:
+        connection.execute(text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS maintenance_type VARCHAR DEFAULT 'Preventivo';"))
+        connection.execute(text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS taller_propietario VARCHAR DEFAULT 'Taller Central';"))
+        connection.commit()
+    except Exception:
+        pass
 
 app = FastAPI(title="Multimakina Cloud Secure API", version="2.5")
 
@@ -60,6 +68,11 @@ def get_vehicles(db: Session = Depends(get_db)):
 @app.post("/vehicles/", tags=["Vehicles"])
 def create_vehicle(payload: dict, db: Session = Depends(get_db)):
     try:
+        # Verificar si el VIN ya existe para evitar errores de duplicado
+        existing = db.query(VehicleModel).filter(VehicleModel.vin == payload.get("vin")).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="El número VIN ya está registrado en el sistema.")
+
         nuevo_vehiculo = VehicleModel(
             brand=payload.get("brand"),
             model=payload.get("model"),
@@ -72,6 +85,8 @@ def create_vehicle(payload: dict, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(nuevo_vehiculo)
         return {"message": "Unidad registrada con éxito", "id": nuevo_vehiculo.id}
+    except HTTPException as he:
+        raise he
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
