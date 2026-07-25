@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
-import models
-from database import engine, get_db
+from . import models
+from .database import engine, get_db
 
 # Inicializar seguridad de contraseñas con Bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
