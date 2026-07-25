@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # URL de conexión de Supabase con tu contraseña integrada
-DEFAULT_DATABASE_URL = "postgresql://postgres:TU_CONTRASEÑA_SUPABASE@db.ditabcbswzrwmkeudspu.supabase.co:5432/postgres"
+DEFAULT_DATABASE_URL = "postgresql://postgres:k9Navzh42qmeX6-@db.ditabcbswzrwmkeudspu.supabase.co:5432/postgres"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
 
