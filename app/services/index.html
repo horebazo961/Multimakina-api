@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MULTIMAKINA | Sistema de Diagnóstico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        platino: '#e2e8f0',
+                        gold: {
+                            300: '#fde047',
+                            400: '#facc15',
+                            500: '#eab308',
+                            600: '#ca8a04',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-[#080808] text-platino min-h-screen selection:bg-gold-500 selection:text-black">
+
+    <!-- VISTA DE AUTENTICACIÓN (LOGIN / REGISTRO) -->
+    <div id="auth-view" class="flex items-center justify-center min-h-screen p-6">
+        <div class="bg-[#121212]/90 backdrop-blur-xl border border-neutral-800/80 p-10 rounded-3xl max-w-md w-full space-y-8 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+            <div class="text-center space-y-2">
+                <h1 class="text-3xl font-light tracking-[0.2em] text-platino">MULTI<span class="font-bold text-gold-400">MAKINA</span></h1>
+                <p id="auth-subtitle" class="text-xs tracking-wider text-neutral-400 uppercase">Arquitectura OBD-II & Diagnóstico</p>
+            </div>
+
+            <!-- FORMULARIO DE LOGIN -->
+            <div id="form-login" class="space-y-5">
+                <div class="space-y-4">
+                    <input type="text" id="login-user" placeholder="Nombre de usuario" class="w-full px-5 py-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <input type="password" id="login-pass" placeholder="Contraseña" class="w-full px-5 py-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                </div>
+                <button onclick="iniciarSesion()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Acceder al Sistema</button>
+                
+                <div class="flex justify-between items-center text-xs pt-2 text-neutral-400">
+                    <span onclick="toggleModoRegistro(true)" class="text-gold-400 hover:underline cursor-pointer">Crear Admin Inicial</span>
+                    <span onclick="entrarInvitado()" class="hover:text-platino underline cursor-pointer">Modo Invitado</span>
+                </div>
+            </div>
+
+            <!-- FORMULARIO DE REGISTRO ADMIN INICIAL -->
+            <div id="form-registro-admin" class="space-y-5 hidden">
+                <div class="p-4 bg-gold-500/5 border border-gold-500/20 text-gold-300 text-xs rounded-2xl leading-relaxed">
+                    Configura la credencial maestra de administración para habilitar el control total del taller.
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="reg-admin-user" placeholder="Usuario Administrador" class="w-full px-5 py-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <input type="email" id="reg-admin-email" placeholder="Correo Electrónico independiente" class="w-full px-5 py-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <input type="password" id="reg-admin-pass" placeholder="Contraseña" class="w-full px-5 py-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                </div>
+                <button onclick="registrarAdminInicial()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Registrar Administrador</button>
+                <div class="text-center text-xs pt-2">
+                    <span onclick="toggleModoRegistro(false)" class="text-neutral-400 hover:text-platino cursor-pointer transition">← Volver al inicio de sesión</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA PRINCIPAL DEL SISTEMA (DASHBOARD TIPO TESLA) -->
+    <div id="app-view" class="flex h-screen overflow-hidden hidden">
+        
+        <!-- SIDEBAR MINIMALISTA -->
+        <aside class="w-72 bg-[#0c0c0c] border-r border-neutral-900 flex flex-col justify-between p-8">
+            <div class="space-y-8">
+                <div>
+                    <h2 class="text-xl font-light tracking-[0.25em] text-platino">MULTI<span class="font-bold text-gold-400">MAKINA</span></h2>
+                    <p class="text-[11px] text-neutral-400 tracking-wider uppercase mt-1" id="sidebar-user-info">Sesión Activa</p>
+                </div>
+                
+                <nav class="space-y-1.5">
+                    <button onclick="cambiarModulo('dashboard')" id="nav-dashboard" class="w-full text-left px-4 py-3 rounded-xl bg-gold-500/10 text-gold-400 font-medium text-sm transition flex items-center gap-3"><span>📊</span> Dashboard</button>
+                    <button onclick="cambiarModulo('vehiculos')" id="nav-vehiculos" class="w-full text-left px-4 py-3 rounded-xl text-neutral-400 hover:bg-neutral-900 hover:text-platino font-medium text-sm transition flex items-center gap-3"><span>🚗</span> Gestión de Vehículos</button>
+                    <button onclick="cambiarModulo('importar')" id="nav-importar" class="w-full text-left px-4 py-3 rounded-xl text-neutral-400 hover:bg-neutral-900 hover:text-platino font-medium text-sm transition flex items-center gap-3"><span>📥</span> Importar OBD-II (PDF)</button>
+                    <button onclick="cambiarModulo('exportar')" id="nav-exportar" class="w-full text-left px-4 py-3 rounded-xl text-neutral-400 hover:bg-neutral-900 hover:text-platino font-medium text-sm transition flex items-center gap-3"><span>📤</span> Exportar Expediente</button>
+                    
+                    <!-- MÓDULO EXCLUSIVO ADMIN -->
+                    <button id="nav-admin-btn" onclick="cambiarModulo('admin')" class="w-full text-left px-4 py-3 rounded-xl text-amber-300 hover:bg-neutral-900 hover:text-amber-200 font-medium text-sm transition flex items-center gap-3 hidden"><span>⚙️</span> Panel Admin</button>
+                </nav>
+            </div>
+            
+            <div class="pt-6 border-t border-neutral-900">
+                <button onclick="cerrarSesion()" class="w-full py-3 bg-red-500/5 hover:bg-red-500/10 text-red-400 font-medium rounded-xl text-xs transition border border-red-500/10">Cerrar Sesión</button>
+            </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="flex-1 flex flex-col overflow-y-auto p-10 max-w-6xl mx-auto space-y-8">
+
+            <!-- MÓDULO 1: DASHBOARD -->
+            <section id="mod-dashboard" class="space-y-6">
+                <div>
+                    <h2 class="text-2xl font-light tracking-wide text-platino">Dashboard General</h2>
+                    <p class="text-xs text-neutral-400 mt-1">Métricas globales y telemetría del sistema</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-2">
+                        <div class="text-neutral-400 text-xs font-medium uppercase tracking-wider">Vehículos Registrados</div>
+                        <div id="stat-total" class="text-4xl font-light text-platino">0</div>
+                    </div>
+                    <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-2">
+                        <div class="text-neutral-400 text-xs font-medium uppercase tracking-wider">Rol Actual</div>
+                        <div id="stat-rol" class="text-4xl font-light text-gold-400">-</div>
+                    </div>
+                    <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-2">
+                        <div class="text-neutral-400 text-xs font-medium uppercase tracking-wider">Estado Core API</div>
+                        <div class="text-4xl font-light text-emerald-400 flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span> ONLINE
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MÓDULO 2: GESTIÓN DE VEHÍCULOS -->
+            <section id="mod-vehiculos" class="space-y-6 hidden">
+                <div>
+                    <h2 class="text-2xl font-light tracking-wide text-platino">Registro de Datos Críticos</h2>
+                    <p class="text-xs text-neutral-400 mt-1">Ingreso de nueva unidad para diagnóstico</p>
+                </div>
+                <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <input type="text" id="reg-brand" placeholder="Marca (Ej. Toyota)" class="p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                        <input type="text" id="reg-model" placeholder="Modelo (Ej. Hilux)" class="p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    </div>
+                    <input type="text" id="reg-vin" placeholder="VIN (17 Dígitos exactos)" maxlength="17" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl uppercase tracking-widest text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <button onclick="crearVehiculoAPI()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Registrar Unidad</button>
+                </div>
+            </section>
+
+            <!-- MÓDULO 3: IMPORTAR PDF -->
+            <section id="mod-importar" class="space-y-6 hidden">
+                <div>
+                    <h2 class="text-2xl font-light tracking-wide text-platino">Importar Reporte PDF (OBD-II)</h2>
+                    <p class="text-xs text-neutral-400 mt-1">Extracción de códigos DTC automatizada</p>
+                </div>
+                <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-5">
+                    <input type="number" id="pdf-vehicle-id" placeholder="ID del Vehículo en Sistema" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <input type="file" id="pdf-file-input" accept=".pdf" class="w-full p-3 bg-[#080808] border border-neutral-800 rounded-2xl text-sm text-neutral-400 file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:bg-neutral-800 file:text-gold-400 file:font-semibold hover:file:bg-neutral-700 transition">
+                    <button onclick="subirPdfAPI()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Procesar Expediente PDF</button>
+                </div>
+            </section>
+
+            <!-- MÓDULO 4: EXPORTAR EXPEDIENTE -->
+            <section id="mod-exportar" class="space-y-6 hidden">
+                <div>
+                    <h2 class="text-2xl font-light tracking-wide text-platino">Exportar Expediente Técnico</h2>
+                    <p class="text-xs text-neutral-400 mt-1">Consulta y despliegue de telemetría completa</p>
+                </div>
+                <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-5">
+                    <input type="number" id="exp-vehicle-id" placeholder="ID del Vehículo" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    <button onclick="consultarExpediente()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Generar Consulta</button>
+                    <div id="expediente-resultado" class="p-6 bg-[#080808] rounded-2xl border border-neutral-800 text-xs font-mono whitespace-pre-wrap text-neutral-300 leading-relaxed">Esperando parámetros de consulta...</div>
+                </div>
+            </section>
+
+            <!-- MÓDULO ADMIN: GESTIÓN DE TÉCNICOS -->
+            <section id="mod-admin" class="space-y-6 hidden">
+                <div>
+                    <h2 class="text-2xl font-light tracking-wide text-gold-400">Panel de Administración</h2>
+                    <p class="text-xs text-neutral-400 mt-1">Control de accesos y credenciales de técnicos</p>
+                </div>
+                <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-5">
+                    <h3 class="text-sm font-semibold tracking-wider uppercase text-neutral-300">Registrar Nuevo Operador</h3>
+                    <div class="space-y-4">
+                        <input type="text" id="new-tech-user" placeholder="Usuario Técnico" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                        <input type="email" id="new-tech-email" placeholder="Correo Electrónico independiente" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                        <input type="password" id="new-tech-pass" placeholder="Contraseña de acceso" class="w-full p-4 bg-[#080808] border border-neutral-800 rounded-2xl text-platino placeholder-neutral-600 focus:outline-none focus:border-gold-400 transition">
+                    </div>
+                    <button onclick="registrarTecnico()" class="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded-2xl tracking-wide transition shadow-lg shadow-gold-500/10">Crear Credencial Operador</button>
+                </div>
+                <div class="bg-[#121212] border border-neutral-900 p-8 rounded-3xl space-y-5">
+                    <h3 class="text-sm font-semibold tracking-wider uppercase text-neutral-300">Directorio de Usuarios Activos</h3>
+                    <div id="admin-users-list" class="space-y-3 text-sm">Cargando directorio...</div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- SCRIPT DE CONTROL Y CONEXIÓN -->
+    <script>
+        const API_BASE = "http://127.0.0.1:8000";
+
+        window.onload = () => {
+            const savedUser = localStorage.getItem("multimakina_user");
+            if(savedUser) {
+                const userObj = JSON.parse(savedUser);
+                activarSesionUI(userObj);
+            }
+        }
+
+        function toggleModoRegistro(mostrar) {
+            if(mostrar) {
+                document.getElementById('form-login').classList.add('hidden');
+                document.getElementById('form-registro-admin').classList.remove('hidden');
+                document.getElementById('auth-subtitle').innerText = "Configuración del Sistema";
+            } else {
+                document.getElementById('form-registro-admin').classList.add('hidden');
+                document.getElementById('form-login').classList.remove('hidden');
+                document.getElementById('auth-subtitle').innerText = "Arquitectura OBD-II & Diagnóstico";
+            }
+        }
+
+        async function registrarAdminInicial() {
+            const username = document.getElementById('reg-admin-user').value;
+            const email = document.getElementById('reg-admin-email').value;
+            const password = document.getElementById('reg-admin-pass').value;
+
+            if(!username || !email || !password) {
+                alert("Completa todos los campos requeridos.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password, role: "ADMIN" })
+                });
+                if(res.ok) {
+                    alert("Administrador configurado con éxito. Ya puedes iniciar sesión.");
+                    toggleModoRegistro(false);
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.detail || JSON.stringify(err)));
+                }
+            } catch(e) {
+                alert("No se pudo conectar con el servicio local.");
+            }
+        }
+
+        async function iniciarSesion() {
+            const username = document.getElementById('login-user').value;
+            const password = document.getElementById('login-pass').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if(res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem("multimakina_user", JSON.stringify(data));
+                    activarSesionUI(data);
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + err.detail);
+                }
+            } catch(e) {
+                alert("No se pudo conectar con el servicio local.");
+            }
+        }
+
+        function entrarInvitado() {
+            const invitado = { username: "Invitado", email: "invitado@taller.com", role: "INVITADO" };
+            localStorage.setItem("multimakina_user", JSON.stringify(invitado));
+            activarSesionUI(invitado);
+        }
+
+        function activarSesionUI(user) {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+            document.getElementById('sidebar-user-info').innerText = `${user.username} · ${user.role}`;
+            document.getElementById('stat-rol').innerText = user.role;
+
+            if(user.role === 'ADMIN') {
+                document.getElementById('nav-admin-btn').classList.remove('hidden');
+                cargarUsuariosAdmin();
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem("multimakina_user");
+            location.reload();
+        }
+
+        function cambiarModulo(modulo) {
+            ['dashboard', 'vehiculos', 'importar', 'exportar', 'admin'].forEach(m => {
+                const el = document.getElementById(`mod-${m}`);
+                if(el) el.classList.add('hidden');
+                const nav = document.getElementById(`nav-${m}`);
+                if(nav) nav.className = "w-full text-left px-4 py-3 rounded-xl text-neutral-400 hover:bg-neutral-900 hover:text-platino font-medium text-sm transition flex items-center gap-3";
+            });
+            document.getElementById(`mod-${modulo}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${modulo}`);
+            if(activeNav) activeNav.className = "w-full text-left px-4 py-3 rounded-xl bg-gold-500/10 text-gold-400 font-medium text-sm transition flex items-center gap-3";
+        }
+
+        async function registrarTecnico() {
+            const username = document.getElementById('new-tech-user').value;
+            const email = document.getElementById('new-tech-email').value;
+            const password = document.getElementById('new-tech-pass').value;
+
+            const res = await fetch(`${API_BASE}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password, role: "TECNICO" })
+            });
+            if(res.ok) {
+                alert("Operador técnico creado correctamente.");
+                document.getElementById('new-tech-user').value = "";
+                document.getElementById('new-tech-email').value = "";
+                document.getElementById('new-tech-pass').value = "";
+                cargarUsuariosAdmin();
+            } else {
+                const err = await res.json();
+                alert("Error al registrar operador: " + (err.detail || JSON.stringify(err)));
+            }
+        }
+
+        async function cargarUsuariosAdmin() {
+            const res = await fetch(`${API_BASE}/auth/users`);
+            if(res.ok) {
+                const users = await res.json();
+                let html = "";
+                users.forEach(u => {
+                    html += `<div class="flex justify-between items-center p-4 bg-[#080808] rounded-2xl border border-neutral-800">
+                        <div>
+                            <span class="font-medium text-platino">${u.username}</span> 
+                            <span class="text-xs text-neutral-500 ml-2">(${u.email})</span> 
+                            <span class="text-xs text-gold-400 font-mono ml-2">[${u.role}]</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-xs font-medium ${u.is_active ? 'text-emerald-400':'text-red-400'}">${u.is_active ? '● Activo' : '● Bloqueado'}</span>
+                            <button onclick="cambiarEstadoUsuario(${u.id}, ${!u.is_active})" class="px-3 py-1.5 rounded-xl text-xs font-medium transition ${u.is_active ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20':'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'}">${u.is_active ? 'Bloquear' : 'Permitir'}</button>
+                        </div>
+                    </div>`;
+                });
+                document.getElementById('admin-users-list').innerHTML = html;
+            }
+        }
+
+        async function cambiarEstadoUsuario(id, nuevoEstado) {
+            const res = await fetch(`${API_BASE}/auth/users/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: nuevoEstado })
+            });
+            if(res.ok) cargarUsuariosAdmin();
+        }
+
+        async function crearVehiculoAPI() {
+            const user = JSON.parse(localStorage.getItem("multimakina_user"));
+            if(user.role === 'INVITADO') {
+                alert("Acceso restringido para cuentas invitadas.");
+                return;
+            }
+            const brand = document.getElementById('reg-brand').value;
+            const model = document.getElementById('reg-model').value;
+            const vin = document.getElementById('reg-vin').value;
+
+            const res = await fetch(`${API_BASE}/vehicles/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brand, model, vin, status: "Diagnóstico" })
+            });
+            if(res.ok) {
+                const data = await res.json();
+                alert(`Unidad registrada de forma exitosa. ID: ${data.id}`);
+            } else {
+                alert("Error al registrar unidad.");
+            }
+        }
+
+        async function subirPdfAPI() {
+            const vehicleId = document.getElementById('pdf-vehicle-id').value;
+            const file = document.getElementById('pdf-file-input').files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/upload-obd-pdf`, {
+                method: 'POST',
+                body: formData
+            });
+            if(res.ok) {
+                const data = await res.json();
+                alert("Expediente procesado correctamente. Códigos DTC identificados:\n" + data.dtc_codes);
+            }
+        }
+
+        async function consultarExpediente() {
+            const vehicleId = document.getElementById('exp-vehicle-id').value;
+            const res = await fetch(`${API_BASE}/vehicles/`);
+            if(res.ok) {
+                const vehicles = await res.json();
+                const veh = vehicles.find(v => v.id == vehicleId);
+                if(veh) {
+                    document.getElementById('expediente-resultado').innerText = JSON.stringify(veh, null, 2);
+                    document.getElementById('stat-total').innerText = vehicles.length;
+                } else {
+                    document.getElementById('expediente-resultado').innerText = "Unidad no encontrada en el registro.";
+                }
+            }
+        }
+    </script>
+</body>
+</html>
