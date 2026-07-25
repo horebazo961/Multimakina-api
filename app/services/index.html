@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multimakina Cloud | Panel Experto de Diagnóstico</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -13,7 +14,7 @@
                         corporate: {
                             dark: '#0B132B',
                             slate: '#1C2541',
-                            accent: '#10B981', // Verde esmeralda técnico
+                            accent: '#10B981',
                             card: '#131B31',
                             border: '#27344E'
                         }
@@ -25,6 +26,7 @@
 </head>
 <body class="bg-corporate-dark text-slate-100 min-h-screen font-sans antialiased flex flex-col">
 
+    <!-- Top Navigation Bar -->
     <header class="bg-corporate-slate border-b border-corporate-border px-6 py-4 flex justify-between items-center shadow-md">
         <div class="flex items-center space-x-3">
             <div class="w-4 h-4 bg-corporate-accent rounded-full animate-pulse"></div>
@@ -36,8 +38,10 @@
         </div>
     </header>
 
+    <!-- Main Content Grid -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
+        <!-- Columna Izquierda: Registro de Vehículo -->
         <section class="bg-corporate-card border border-corporate-border rounded-xl p-6 shadow-xl flex flex-col justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-white mb-1 flex items-center gap-2">
@@ -70,6 +74,7 @@
             <div id="formResponse" class="mt-4 text-xs font-mono text-corporate-accent"></div>
         </section>
 
+        <!-- Columna Central y Derecha: Visualización de Unidades Conectadas -->
         <section class="lg:col-span-2 bg-corporate-card border border-corporate-border rounded-xl p-6 shadow-xl flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <div>
@@ -81,6 +86,7 @@
                 </button>
             </div>
 
+            <!-- Tabla de Datos Estilizada -->
             <div class="flex-1 overflow-x-auto border border-corporate-border rounded-lg">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -103,23 +109,25 @@
 
     </main>
 
+    <!-- Footer Corporativo -->
     <footer class="border-t border-corporate-border py-4 text-center text-xs text-slate-500">
-        Multimakina Architecture Systems &copy; 2026 — Diseñado bajo estándares de Alta Disponibilidad y Grado de Producción.
+        Multimakina Architecture Systems &copy; 2026 — Grado de Producción Cloud.
     </footer>
 
+    <!-- Script de Consumo Directo a Render -->
     <script>
-        const API_URL = "https://multimakina-api.onrender.com"; // Conectado a producción
+        const API_URL = "https://multimakina-api.onrender.com";
 
         async function loadVehicles() {
             const tbody = document.getElementById('vehicleTableBody');
             tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-corporate-accent font-mono animate-pulse">Sincronizando con base de datos en la nube...</td></tr>`;
             
             try {
-                const response = await fetch(`${API_URL}/vehicles/`);
+                const response = await fetch(`${API_URL}/vehicles`);
                 if (!response.ok) throw new Error("Error al consultar la API");
                 const vehicles = await response.json();
 
-                if (vehicles.length === 0) {
+                if (!vehicles || vehicles.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-slate-500">No hay vehículos registrados en el sistema.</td></tr>`;
                     return;
                 }
@@ -129,7 +137,7 @@
                         <td class="p-3 font-mono text-xs text-slate-400">#${v.id}</td>
                         <td class="p-3 font-semibold text-white">${v.brand} ${v.model}</td>
                         <td class="p-3 font-mono text-xs text-slate-400">${v.vin}</td>
-                        <td class="p-3"><span class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-corporate-accent border border-emerald-800">${v.status}</span></td>
+                        <td class="p-3"><span class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-corporate-accent border border-emerald-800">${v.status || 'Activo'}</span></td>
                         <td class="p-3 text-xs text-slate-300">${v.taller_propietario}</td>
                     </tr>
                 `).join('');
@@ -153,7 +161,7 @@
             responseDiv.innerHTML = "Transmitiendo datos al clúster...";
 
             try {
-                const res = await fetch(`${API_URL}/vehicles/`, {
+                const res = await fetch(`${API_URL}/vehicles`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -164,13 +172,12 @@
                 
                 responseDiv.innerHTML = `✔ ${result.message} (ID: ${result.id})`;
                 document.getElementById('vehicleForm').reset();
-                loadVehicles(); // Recargar tabla
+                loadVehicles();
             } catch (err) {
                 responseDiv.innerHTML = `❌ Error al registrar: ${err.message}`;
             }
         });
 
-        // Carga inicial al abrir la página
         loadVehicles();
     </script>
 </body>
