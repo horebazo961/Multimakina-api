@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# URL utilizando el puerto 6543 (Session Pooler de Supabase)
+# URL utilizando el Session Pooler de Supabase en el puerto 6543
 DEFAULT_DATABASE_URL = "postgresql://postgres.ditabcbswzrwmkeudspu:k9Navzh42qmeX6-@aws-0-us-west-1.pooler.supabase.com:6543/postgres"
 
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
