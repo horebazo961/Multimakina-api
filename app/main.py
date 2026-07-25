@@ -5,17 +5,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import os
 
-# Configuración de Base de Datos (Pooler Supabase)
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres.ditabcbswzrwmkeudspu:CONTRASEÑA_REAL@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
+    "postgresql://postgres.ditabcbswzrwmkeudspu:k9Navzh42qmeX6-@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
 )
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Modelo de Base de Datos para Vehículos
 class VehicleModel(Base):
     __tablename__ = "vehicles"
 
@@ -24,17 +22,13 @@ class VehicleModel(Base):
     model = Column(String, index=True)
     vin = Column(String, unique=True, index=True)
     status = Column(String, default="Diagnóstico")
+    maintenance_type = Column(String, default="Preventivo") # Nuevo campo
     taller_propietario = Column(String, default="Taller Central")
 
-# Crear tablas automáticamente si no existen
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Multimakina Cloud Secure API",
-    version="2.5"
-)
+app = FastAPI(title="Multimakina Cloud Secure API", version="2.5")
 
-# Habilitar CORS para permitir conexión desde Vercel y móviles
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,9 +52,8 @@ def read_root():
 @app.get("/vehicles/", tags=["Vehicles"])
 def get_vehicles(db: Session = Depends(get_db)):
     try:
-        vehicles = db.query(VehicleModel).all()
-        return vehicles
-    except Exception as e:
+        return db.query(VehicleModel).all()
+    except Exception:
         return []
 
 @app.post("/vehicles", tags=["Vehicles"])
@@ -72,6 +65,7 @@ def create_vehicle(payload: dict, db: Session = Depends(get_db)):
             model=payload.get("model"),
             vin=payload.get("vin"),
             status=payload.get("status", "Diagnóstico"),
+            maintenance_type=payload.get("maintenance_type", "Preventivo"),
             taller_propietario=payload.get("taller_propietario", "Taller Central")
         )
         db.add(nuevo_vehiculo)

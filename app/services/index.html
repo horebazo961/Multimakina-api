@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multimakina Cloud | Panel Experto de Diagnóstico</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -26,7 +25,6 @@
 </head>
 <body class="bg-corporate-dark text-slate-100 min-h-screen font-sans antialiased flex flex-col">
 
-    <!-- Top Navigation Bar -->
     <header class="bg-corporate-slate border-b border-corporate-border px-6 py-4 flex justify-between items-center shadow-md">
         <div class="flex items-center space-x-3">
             <div class="w-4 h-4 bg-corporate-accent rounded-full animate-pulse"></div>
@@ -38,10 +36,9 @@
         </div>
     </header>
 
-    <!-- Main Content Grid -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Columna Izquierda: Registro de Vehículo -->
+        <!-- Columna Izquierda: Registro de Vehículo con Selector de Mantenimiento -->
         <section class="bg-corporate-card border border-corporate-border rounded-xl p-6 shadow-xl flex flex-col justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-white mb-1 flex items-center gap-2">
@@ -63,6 +60,15 @@
                         <input type="text" id="vin" required placeholder="Ej. 1HGCR2F83HA..." class="w-full bg-corporate-dark border border-corporate-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-corporate-accent transition">
                     </div>
                     <div>
+                        <label class="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1">Tipo de Mantenimiento</label>
+                        <select id="maintenance_type" class="w-full bg-corporate-dark border border-corporate-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-corporate-accent transition">
+                            <option value="Preventivo">Mantenimiento Preventivo</option>
+                            <option value="Correctivo">Mantenimiento Correctivo</option>
+                            <option value="Diagnóstico Electrónico">Diagnóstico Electrónico Avanzado</option>
+                            <option value="Performance Tuning">Performance Tuning / Repro</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1">Taller Propietario</label>
                         <input type="text" id="taller_propietario" value="Taller Central" class="w-full bg-corporate-dark border border-corporate-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-corporate-accent transition">
                     </div>
@@ -74,7 +80,7 @@
             <div id="formResponse" class="mt-4 text-xs font-mono text-corporate-accent"></div>
         </section>
 
-        <!-- Columna Central y Derecha: Visualización de Unidades Conectadas -->
+        <!-- Columna Derecha: Flota Activa -->
         <section class="lg:col-span-2 bg-corporate-card border border-corporate-border rounded-xl p-6 shadow-xl flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <div>
@@ -86,7 +92,6 @@
                 </button>
             </div>
 
-            <!-- Tabla de Datos Estilizada -->
             <div class="flex-1 overflow-x-auto border border-corporate-border rounded-lg">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -94,7 +99,7 @@
                             <th class="p-3">ID</th>
                             <th class="p-3">Vehículo</th>
                             <th class="p-3">VIN</th>
-                            <th class="p-3">Estado</th>
+                            <th class="p-3">Mantenimiento</th>
                             <th class="p-3">Taller</th>
                         </tr>
                     </thead>
@@ -109,12 +114,10 @@
 
     </main>
 
-    <!-- Footer Corporativo -->
     <footer class="border-t border-corporate-border py-4 text-center text-xs text-slate-500">
         Multimakina Architecture Systems &copy; 2026 — Grado de Producción Cloud.
     </footer>
 
-    <!-- Script de Consumo Directo a Render -->
     <script>
         const API_URL = "https://multimakina-api.onrender.com";
 
@@ -137,12 +140,12 @@
                         <td class="p-3 font-mono text-xs text-slate-400">#${v.id}</td>
                         <td class="p-3 font-semibold text-white">${v.brand} ${v.model}</td>
                         <td class="p-3 font-mono text-xs text-slate-400">${v.vin}</td>
-                        <td class="p-3"><span class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-corporate-accent border border-emerald-800">${v.status || 'Activo'}</span></td>
+                        <td class="p-3"><span class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-corporate-accent border border-emerald-800">${v.maintenance_type || 'Preventivo'}</span></td>
                         <td class="p-3 text-xs text-slate-300">${v.taller_propietario}</td>
                     </tr>
                 `).join('');
             } catch (error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-red-400">Error de conexión con el backend en Render. Verifique el estado del servidor.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-red-400">Error de conexión con el backend en Render.</td></tr>`;
             }
         }
 
@@ -154,7 +157,7 @@
                 brand: document.getElementById('brand').value,
                 model: document.getElementById('model').value,
                 vin: document.getElementById('vin').value,
-                status: "Diagnóstico",
+                maintenance_type: document.getElementById('maintenance_type').value,
                 taller_propietario: document.getElementById('taller_propietario').value
             };
 
