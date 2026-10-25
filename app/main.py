@@ -12,7 +12,10 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./multimakina.db")
 # allow_origin_regex sin abrir CORS a cualquier sitio.
 CORS_ORIGINS = [
     origin.strip().rstrip("/")
-    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
     if origin.strip()
 ]
 
