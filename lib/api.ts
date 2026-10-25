@@ -46,8 +46,12 @@ export function apiErrorMessage(error: unknown) {
   const detail = axiosError.response?.data?.detail
   if (typeof detail === "object" && detail?.message) return detail.message
   if (typeof detail === "string") return detail
-  if (axiosError.code === "ECONNABORTED") return "El backend está tardando en despertar. Render puede estar iniciando el servicio."
-  if (!axiosError.response) return "No fue posible conectar con Render. Verifica NEXT_PUBLIC_API_URL y CORS."
+  if (axiosError.code === "ECONNABORTED") {
+    return "El backend está tardando en responder. Si usas Render Free, el servicio puede estar despertando (cold start)."
+  }
+  if (!axiosError.response) {
+    return "No fue posible conectar con el backend. Verifica NEXT_PUBLIC_API_URL y la configuración de CORS."
+  }
   return "Ocurrió un error inesperado al comunicarse con el backend."
 }
 
@@ -57,6 +61,6 @@ export async function listVehicles() {
 }
 
 export async function createVehicle(payload: VehiclePayload) {
-  const { data } = await api.post<Vehicle>("/api/v1/vehicles/", payload)
+  const { data } = await api.post<{ message: string; id: number }>("/api/v1/vehicles/", payload)
   return data
 }
