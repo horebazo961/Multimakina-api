@@ -1,63 +1,722 @@
+
 "use client"
 
-import { FormEvent, useCallback, useEffect, useState } from "react"
-import { Activity, AlertTriangle, CarFront, CheckCircle2, RefreshCw, Server, Zap } from "lucide-react"
-import { apiErrorCode, apiErrorMessage, createVehicle, listVehicles, Vehicle } from "@/lib/api"
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react"
+import type { FormEvent } from "react"
 
-const initialForm = { brand: "", model: "", vin: "", maintenance_type: "Diagnóstico Electrónico", taller_propietario: "Taller Central" }
+import {
+  Activity,
+  AlertTriangle,
+  CarFront,
+  CheckCircle2,
+  Clock3,
+  Database,
+  Gauge,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Wrench,
+  Zap,
+} from "lucide-react"
+
+import {
+  apiErrorCode,
+  apiErrorMessage,
+  createVehicle,
+  listVehicles,
+} from "@/lib/api"
+
+import type {
+  Vehicle,
+  VehiclePayload,
+} from "@/lib/api"
+
+const TIME_ZONE = "America/Guayaayaquil".replace(
+  "Guayaayaquil",
+  "Guayaquil"
+)
+
+const INITIAL_FORM = {
+  brand: "",
+  model: "",
+  vin: "",
+  maintenance_type: "Diagnóstico Electrónico",
+  taller_propietario: "",
+}
+
+function formatDateTime(value: string | Date): string {
+  const date = value instanceof Date
+    ? value
+    : new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "Fecha no disponible"
+  }
+
+  return new Intl.DateTimeFormat("es-EC", {
+    timeZone: TIME_ZONE,
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date)
+}
+
+function statusTone(status?: string | null): string {
+  const value = (status || "").toLocaleLowerCase("es")
+
+  if (
+    value.includes("operativo") ||
+    value.includes("completado")
+  ) {
+    return "status-good"
+  }
+
+  if (
+    value.includes("error") ||
+    value.includes("fall") ||
+    value.includes("crítico") ||
+    value.includes("critico")
+  ) {
+    return "status-danger"
+  }
+
+  if (
+    value.includes("diagnóstico") ||
+    value.includes("diagnostico") ||
+    value.includes("pendiente") ||
+    value.includes("mantenimiento")
+  ) {
+    return "status-warn"
+  }
+
+  return "status-neutral"
+}
+
+function displayValue(value?: string | null): string {
+  return value?.trim() || "No especificado"
+}
+
+function displayDtcCodes(
+  value?: string | string[] | null
+): string {
+  if (Array.isArray(value)) {
+    return value.length > 0
+      ? value.join(", ")
+      : "Sin datos reportados"
+  }
+
+  return value?.trim() || "Sin datos reportados"
+}
+
+function isFollowUpStatus(status?: string | null): boolean {
+  const value = (status || "").toLocaleLowerCase("es")
+
+  return [
+    "diagnóstico",
+    "diagnostico",
+    "pendiente",
+    "mantenimiento",
+  ].some((keyword) => value.includes(keyword))
+}
 
 export default function DashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [form, setForm] = useState(initialForm)
+  const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [vinError, setVinError] = useState("")
   const [success, setSuccess] = useState("")
   const [lastSync, setLastSync] = useState<Date | null>(null)
+  const [now, setNow] = useState<Date | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    try { setVehicles(await listVehicles()); setLastSync(new Date()); setError("") }
-    catch (err) { setError(apiErrorMessage(err)) }
-    finally { setLoading(false) }
+
+    try {
+      const data = await listVehicles()
+
+      setVehicles(data)
+      setLastSync(new Date())
+      setError("")
+    } catch (err) {
+      setError(apiErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { refresh(); const interval = window.setInterval(() => { if (!document.hidden) refresh() }, 15000); return () => window.clearInterval(interval) }, [refresh])
+  useEffect(() => {
+    setNow(new Date())
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSaving(true); setError(""); setVinError(""); setSuccess("")
+    const clockTimer = window.setInterval(() => {
+      setNow(new Date())
+    }, 1000)
+
+    void refresh()
+
+    const syncTimer = window.setInterval(() => {
+      if (!document.hidden) {
+        void refresh()
+      }
+    }, 15000)
+
+    return () => {
+      window.clearInterval(clockTimer)
+      window.clearInterval(syncTimer)
+    }
+  }, [refresh])
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault()
+
+    setSaving(true)
+    setError("")
+    setVinError("")
+    setSuccess("")
+
     const normalizedVin = form.vin.trim().toUpperCase()
+
+    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(normalizedVin)) {
+      setVinError(
+        "Introduce un VIN de 17 caracteres válidos. " +
+        "Las letras I, O y Q no se utilizan en el VIN estándar."
+      )
+      setSaving(false)
+      return
+    }
+
+    const payload: VehiclePayload = {
+      brand: form.brand.trim(),
+      model: form.model.trim(),
+      vin: normalizedVin,
+      maintenance_type: form.maintenance_type,
+      taller_propietario: form.taller_propietario.trim(),
+      status: "Diagnóstico",
+    }
+
     try {
-      const created = await createVehicle({ ...form, vin: normalizedVin, status: "Diagnóstico" })
-      if (created.id) setVehicles((current) => [{ ...created, ...form, vin: normalizedVin, id: created.id, status: "Diagnóstico" }, ...current])
-      setSuccess("Unidad registrada y sincronizada con la flota."); setForm(initialForm); await refresh()
+      await createVehicle(payload)
+
+      setForm(INITIAL_FORM)
+      setSuccess(
+        "El servidor aceptó la solicitud. " +
+        "Actualizando la lista de vehículos."
+      )
+
+      await refresh()
     } catch (err) {
+      const code = apiErrorCode(err)
       const message = apiErrorMessage(err)
-      if (apiErrorCode(err) === "DUPLICATE_VIN") setVinError(message)
-      else setError(message)
-    } finally { setSaving(false) }
+
+      if (
+        code === "DUPLICATE_VIN" ||
+        code === "VIN_ALREADY_EXISTS"
+      ) {
+        setVinError(message)
+      } else {
+        setError(message)
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
-  return <main className="min-h-screen bg-ink px-5 py-6 text-slate-100 md:px-10">
-    <header className="mx-auto flex max-w-7xl items-center justify-between border-b border-line pb-6">
-      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-signal text-ink"><Zap size={20} /></div><div><p className="font-mono text-[10px] uppercase tracking-[0.25em] text-signal">Multimakina / control room</p><h1 className="text-xl font-extrabold tracking-tight">Telemetría vehicular</h1></div></div>
-      <div className="hidden items-center gap-3 text-xs text-slate-400 sm:flex"><span className="flex items-center gap-2"><span className="size-2 rounded-full bg-signal" /> API operativa</span><span className="rounded-full border border-line px-3 py-1 font-mono">v2.5</span></div>
-    </header>
-    <section className="mx-auto max-w-7xl py-8"><div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {[{ label: "Unidades registradas", value: vehicles.length, icon: CarFront }, { label: "Diagnósticos activos", value: vehicles.filter(v => v.status !== "Operativo").length, icon: Activity }, { label: "Voltaje promedio", value: "12.6 V", icon: Zap }, { label: "Estado del sistema", value: "Estable", icon: Server }].map(({ label, value, icon: Icon }) => <article key={label} className="rounded-2xl border border-line bg-panel p-5"><div className="mb-5 flex items-center justify-between"><p className="text-xs text-slate-400">{label}</p><Icon size={17} className="text-signal" /></div><p className="text-2xl font-bold">{value}</p></article>)}
-    </div>
-    <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-      <section className="rounded-2xl border border-line bg-panel p-6"><div className="mb-6"><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-signal">Nueva unidad</p><h2 className="mt-2 text-lg font-bold">Registrar vehículo</h2><p className="mt-1 text-xs leading-5 text-slate-400">Los datos se validan y persisten directamente en la API.</p></div>
-        <form onSubmit={handleSubmit} className="space-y-4">{([["brand","Marca","Toyota"],["model","Modelo","Hilux 2.8"],["vin","VIN / chasis","17 caracteres"]] as const).map(([key, label, placeholder]) => <label key={key} className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-300">{label}</span><input required minLength={key === "vin" ? 17 : 1} maxLength={key === "vin" ? 17 : 50} value={form[key]} onChange={e => { setForm({ ...form, [key]: e.target.value }); if (key === "vin") setVinError("") }} aria-invalid={key === "vin" && Boolean(vinError)} aria-describedby={key === "vin" && vinError ? "vin-error" : undefined} placeholder={placeholder} className={`w-full rounded-xl border bg-ink px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-600 focus:border-signal ${key === "vin" && vinError ? "border-red-400" : "border-line"}`} />{key === "vin" && vinError && <span id="vin-error" className="mt-1.5 block text-xs text-red-300">{vinError}</span>}</label>)}
-          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-300">Tipo de mantenimiento</span><select value={form.maintenance_type} onChange={e => setForm({ ...form, maintenance_type: e.target.value })} className="w-full rounded-xl border border-line bg-ink px-3.5 py-3 text-sm outline-none focus:border-signal"><option>Diagnóstico Electrónico</option><option>Preventivo</option><option>Correctivo</option></select></label>
-          {error && <div role="alert" className="flex gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-5 text-red-300"><AlertTriangle size={16} className="mt-0.5 shrink-0" />{error}</div>}{success && <div role="status" className="flex gap-2 rounded-xl border border-signal/30 bg-signal/10 p-3 text-xs leading-5 text-signal"><CheckCircle2 size={16} className="mt-0.5 shrink-0" />{success}</div>}
-          <button disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-xl bg-signal py-3 text-sm font-bold text-ink transition hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-60">{saving && <RefreshCw size={15} className="animate-spin" />} {saving ? "Transmitiendo..." : "Registrar unidad"}</button>
-        </form>
-      </section>
-      <section className="min-w-0 rounded-2xl border border-line bg-panel p-6"><div className="mb-6 flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-signal">Live fleet</p><h2 className="mt-2 text-lg font-bold">Flota y diagnósticos activos</h2><p className="mt-1 text-xs text-slate-400">Actualización automática cada 15 segundos{lastSync && ` · última sincronización ${lastSync.toLocaleTimeString("es-CO")}`}</p></div><button onClick={refresh} disabled={loading} aria-label="Sincronizar flota" className="rounded-xl border border-line p-2.5 text-slate-300 hover:border-signal hover:text-signal"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button></div>
-        <div className="overflow-x-auto rounded-xl border border-line"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-ink text-[10px] uppercase tracking-wider text-slate-500"><tr>{["Unidad","VIN","Diagnóstico","Taller","Estado"].map(h => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y divide-line">{loading ? <tr><td colSpan={5} className="px-4 py-12 text-center font-mono text-xs text-slate-500">Sincronizando con la API...</td></tr> : vehicles.length ? vehicles.map(v => <tr key={v.id} className="transition hover:bg-ink/60"><td className="px-4 py-4 font-semibold">{v.brand} {v.model}</td><td className="px-4 py-4 font-mono text-xs text-slate-400">{v.vin}</td><td className="px-4 py-4 text-xs text-slate-300">{v.dtc_codes || "Sin códigos DTC"}</td><td className="px-4 py-4 text-xs text-slate-400">{v.taller_propietario || "Taller Central"}</td><td className="px-4 py-4"><span className="rounded-full bg-signal/10 px-2.5 py-1 text-[10px] font-semibold text-signal">{v.status || "Diagnóstico"}</span></td></tr>) : <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">No hay unidades registradas todavía.</td></tr>}</tbody></table></div>
-      </section>
-    </div></section>
-  </main>
-}
+  const followUpCount = vehicles.filter(
+    (vehicle) => isFollowUpStatus(vehicle.status)
+  ).length
+
+  const latestSyncTime = lastSync
+    ? new Intl.DateTimeFormat("es-EC", {
+        timeZone: TIME_ZONE,
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(lastSync)
+    : "—"
+
+  return (
+    <main className="app-shell">
+      <div className="ambient ambient-one" aria-hidden="true" />
+      <div className="ambient ambient-two" aria-hidden="true" />
+
+      <div className="dashboard">
+        <header className="topbar">
+          <a
+            href="#inicio"
+            className="brand"
+            aria-label="MULTIMAKINA, inicio"
+          >
+            <span className="brand-mark">
+              <Gauge size={22} strokeWidth={2.2} />
+            </span>
+
+            <span className="brand-copy">
+              <span className="brand-name">
+                MULTIMAKINA<span className="brand-dot">.</span>
+              </span>
+
+              <span className="brand-subtitle">
+                AUTOMOTIVE INTELLIGENCE
+              </span>
+            </span>
+          </a>
+
+          <div className="topbar-right">
+            <span
+              className={[
+                "connection-pill",
+                error
+                  ? "connection-offline"
+                  : lastSync
+                    ? "connection-online"
+                    : "connection-pending",
+              ].join(" ")}
+            >
+              <span className="connection-dot" />
+
+              {error
+                ? "Conexión con incidencias"
+                : lastSync
+                  ? "API conectada"
+                  : "Conectando API"}
+            </span>
+
+            <div className="clock-block">
+              <Clock3 size={16} />
+
+              <span>
+                {now
+                  ? formatDateTime(now)
+                  : "Cargando hora…"}
+              </span>
+
+              <span className="timezone">ECU</span>
+            </div>
+          </div>
+        </header>
+
+        <section id="inicio" className="hero">
+          <div>
+            <p className="eyebrow">
+              <span className="eyebrow-line" />
+              CENTRO DE OPERACIONES
+            </p>
+
+            <h1>
+              Control de <span>flota.</span>
+            </h1>
+
+            <p className="hero-description">
+              Vehículos, mantenimientos y datos operativos
+              en un solo lugar.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="button-secondary refresh-button"
+          >
+            <RefreshCw
+              size={16}
+              className={loading ? "spin" : ""}
+            />
+            Sincronizar
+          </button>
+        </section>
+
+        <section
+          className="metrics-grid"
+          aria-label="Resumen de la flota"
+        >
+          <article className="metric-card">
+            <div className="metric-top">
+              <span>Vehículos registrados</span>
+              <span className="metric-icon">
+                <CarFront size={18} />
+              </span>
+            </div>
+
+            <div className="metric-value">
+              {loading && vehicles.length === 0
+                ? "—"
+                : vehicles.length.toLocaleString("es-EC")}
+            </div>
+
+            <div className="metric-foot">
+              Registros devueltos por la API
+            </div>
+          </article>
+
+          <article className="metric-card">
+            <div className="metric-top">
+              <span>En seguimiento</span>
+              <span className="metric-icon">
+                <Activity size={18} />
+              </span>
+            </div>
+
+            <div className="metric-value">
+              {loading && vehicles.length === 0
+                ? "—"
+                : followUpCount.toLocaleString("es-EC")}
+            </div>
+
+            <div className="metric-foot">
+              Según el estado reportado
+            </div>
+          </article>
+
+          <article className="metric-card">
+            <div className="metric-top">
+              <span>Última sincronización</span>
+              <span className="metric-icon">
+                <Database size={18} />
+              </span>
+            </div>
+
+            <div className="metric-value metric-value-small">
+              {latestSyncTime}
+            </div>
+
+            <div className="metric-foot">
+              {lastSync
+                ? formatDateTime(lastSync)
+                : "Aún sin confirmar"}
+            </div>
+          </article>
+
+          <article className="metric-card">
+            <div className="metric-top">
+              <span>Telemetría</span>
+              <span className="metric-icon">
+                <Zap size={18} />
+              </span>
+            </div>
+
+            <div className="metric-value metric-value-small">
+              Sin señal
+            </div>
+
+            <div className="metric-foot">
+              No hay lecturas en vivo conectadas
+            </div>
+          </article>
+        </section>
+
+        <section className="content-grid">
+          <section
+            className="surface register-panel"
+            aria-labelledby="register-title"
+          >
+            <div className="section-heading">
+              <div className="section-icon">
+                <CarFront size={19} />
+              </div>
+
+              <div>
+                <p className="eyebrow">NUEVO REGISTRO</p>
+                <h2 id="register-title">
+                  Ingresar vehículo
+                </h2>
+              </div>
+            </div>
+
+            <p className="section-description">
+              Completa los datos básicos. El backend debe
+              validar y guardar el registro.
+            </p>
+
+            <form
+              onSubmit={handleSubmit}
+              className="vehicle-form"
+            >
+              <label className="field">
+                <span>
+                  Marca<span className="required-mark"> *</span>
+                </span>
+
+                <input
+                  required
+                  minLength={1}
+                  maxLength={80}
+                  value={form.brand}
+                  onChange={(event) => {
+                    setForm((current) => ({
+                      ...current,
+                      brand: event.target.value,
+                    }))
+                  }}
+                  placeholder="Ej. Toyota"
+                  autoComplete="organization"
+                />
+              </label>
+
+              <label className="field">
+                <span>
+                  Modelo<span className="required-mark"> *</span>
+                </span>
+
+                <input
+                  required
+                  minLength={1}
+                  maxLength={80}
+                  value={form.model}
+                  onChange={(event) => {
+                    setForm((current) => ({
+                      ...current,
+                      model: event.target.value,
+                    }))
+                  }}
+                  placeholder="Ej. Hilux 2.8"
+                  autoComplete="off"
+                />
+              </label>
+
+              <label className="field">
+                <span>
+                  VIN / chasis
+                  <span className="required-mark"> *</span>
+                </span>
+
+                <input
+                  required
+                  minLength={17}
+                  maxLength={17}
+                  pattern="[A-HJ-NPR-Z0-9]{17}"
+                  value={form.vin}
+                  onChange={(event) => {
+                    setForm((current) => ({
+                      ...current,
+                      vin: event.target.value.toUpperCase(),
+                    }))
+
+                    setVinError("")
+                  }}
+                  aria-invalid={Boolean(vinError)}
+                  aria-describedby={
+                    vinError ? "vin-error" : undefined
+                  }
+                  placeholder="17 caracteres"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+
+                {vinError && (
+                  <span
+                    id="vin-error"
+                    className="field-error"
+                    role="alert"
+                  >
+                    {vinError}
+                  </span>
+                )}
+              </label>
+
+              <label className="field">
+                <span>Tipo de mantenimiento</span>
+
+                <select
+                  value={form.maintenance_type}
+                  onChange={(event) => {
+                    setForm((current) => ({
+                      ...current,
+                      maintenance_type: event.target.value,
+                    }))
+                  }}
+                >
+                  <option>Diagnóstico Electrónico</option>
+                  <option>Preventivo</option>
+                  <option>Correctivo</option>
+                  <option>Inspección general</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Taller / propietario</span>
+
+                <input
+                  maxLength={120}
+                  value={form.taller_propietario}
+                  onChange={(event) => {
+                    setForm((current) => ({
+                      ...current,
+                      taller_propietario: event.target.value,
+                    }))
+                  }}
+                  placeholder="Nombre del taller (opcional)"
+                  autoComplete="organization"
+                />
+              </label>
+
+              {error && (
+                <div role="alert" className="notice notice-error">
+                  <AlertTriangle size={17} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {success && (
+                <div role="status" className="notice notice-success">
+                  <CheckCircle2 size={17} />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="button-primary"
+              >
+                {saving
+                  ? <RefreshCw size={16} className="spin" />
+                  : <Zap size={16} />}
+
+                {saving
+                  ? "Enviando registro…"
+                  : "Registrar vehículo"}
+              </button>
+
+              <p className="form-footnote">
+                <ShieldCheck size={14} />
+                La confirmación depende de la respuesta del servidor.
+              </p>
+            </form>
+          </section>
+
+          <section
+            className="surface fleet-panel"
+            aria-labelledby="fleet-title"
+          >
+            <div className="fleet-heading">
+              <div>
+                <p className="eyebrow">
+                  INVENTARIO OPERATIVO
+                </p>
+
+                <h2 id="fleet-title">
+                  Vehículos ingresados
+                </h2>
+
+                <p className="section-description">
+                  Vista resumida de los registros disponibles.
+                </p>
+              </div>
+
+              <span className="count-chip">
+                {vehicles.length}{" "}
+                {vehicles.length === 1 ? "unidad" : "unidades"}
+              </span>
+            </div>
+
+            {error && (
+              <div
+                role="alert"
+                className="notice notice-error fleet-notice"
+              >
+                <AlertTriangle size={17} />
+
+                <span>
+                  No se pudo actualizar la flota. {error}
+                  {" "}Los datos anteriores, si existen,
+                  se conservan en pantalla.
+                </span>
+              </div>
+            )}
+
+            {loading && vehicles.length === 0 ? (
+              <div className="empty-state">
+                <RefreshCw size={22} className="spin" />
+                <p>Consultando registros…</p>
+                <span>
+                  Esperando respuesta del backend
+                </span>
+              </div>
+            ) : vehicles.length === 0 ? (
+              <div className="empty-state">
+                <CarFront size={25} />
+                <p>Aún no hay vehículos registrados</p>
+                <span>
+                  Cuando la API devuelva registros,
+                  aparecerán aquí como tarjetas.
+                </span>
+              </div>
+            ) : (
+              <div className="vehicle-grid">
+                {vehicles.map((vehicle) => (
+                  <article
+                    className="vehicle-card"
+                    key={vehicle.id}
+                  >
+                    <div className="vehicle-card-top">
+                      <span className="vehicle-icon">
+                        <CarFront size={20} />
+                      </span>
+
+                      <span
+                        className={[
+                          "status-chip",
+                          statusTone(vehicle.status),
+                        ].join(" ")}
+                      >
+                        {vehicle.status || "Estado no reportado"}
+                      </span>
+                    </div>
+
+                    <h3>
+                      {vehicle.brand}{" "}
+                      <span>{vehicle.model}</span>
+                    </h3>
+
+                    <p className="vehicle-vin">
+                      VIN · {vehicle.vin || "No disponible"}
+                    </p>
+
+                    <div className="vehicle-details">
+                      <div className="detail-row">
+                        <Wrench size={14} />
+                        <span>Mantenimiento</span>
+                        <strong>
+                          {displayValue(vehicle.maintenance_type)}
+                        </strong>
+                      </div>
+
+                      <div className="detail-row">
+                        <Activity size={14} />
+                        <span>Códigos DTC</span>
+                        <strong>
+                          {displayDtcCodes(vehicle.dtc_codes)}
+                        </strong>
+                      </div>
+
+                      <div className="detail-row">
+                        <Server size={14} />
+                        <span>Taller</span>
+                        <strong>
+                          {displayValue(vehicle.taller_propietario)}
+                        </strong>
+                      </div>
+
+                      <div className="detail-row">
+                        <Clock3 size={14} />
+                        <span>Fecha de ingreso</span>
+                        <strong>
+                          {vehicle.created_at
+                            ? formatDateTime(vehicle.created_at)
+                            : "No disponible en la API"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="vehicle-card-footer">
+                      <span>Identificador</span>
+                      <code>#{vehicle.id}</code>
+                    </div>
+                  </article>
+       
