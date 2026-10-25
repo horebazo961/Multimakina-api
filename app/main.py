@@ -4,7 +4,7 @@ Backend FastAPI limpio, listo para Render (Free) + Supabase (Free).
 """
 
 import os
-from typing import Optional
+import logging
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
+
+logger = logging.getLogger("multimakina")
 
 # ---------------------------------------------------------------------------
 # Modelo
@@ -30,11 +32,9 @@ class VehicleModel(Base):
     taller_propietario = Column(String, default="Taller Central")
 
 
-# Crear tablas al arrancar (seguro en Postgres / Supabase)
-Base.metadata.create_all(bind=engine)
-
-# Asegurar columnas nuevas si la tabla ya existía
+# Crear tablas al arrancar (no tumba el proceso si la DB no responde)
 try:
+    Base.metadata.create_all(bind=engine)
     with engine.connect() as connection:
         connection.execute(
             text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS maintenance_type VARCHAR DEFAULT 'Preventivo'")
@@ -43,8 +43,8 @@ try:
             text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS taller_propietario VARCHAR DEFAULT 'Taller Central'")
         )
         connection.commit()
-except Exception:
-    pass
+except Exception as e:
+    logger.warning("No se pudieron crear/actualizar tablas al inicio: %s", e)
 
 # ---------------------------------------------------------------------------
 # App + CORS
@@ -61,7 +61,7 @@ CORS_ORIGINS = [
 
 app = FastAPI(
     title="Multimakina Cloud API",
-    version="3.0.0",
+    version="3.0.1",
     description="API de gestión vehicular para talleres - Multimakina",
 )
 
@@ -95,7 +95,7 @@ def duplicate_vin_error() -> HTTPException:
 
 @app.get("/")
 def health():
-    return {"status": "online", "system": "Multimakina Cloud API", "version": "3.0.0"}
+    return {"status": "online", "system": "Multimakina Cloud API", "version": "3.0.1"}
 
 
 @app.get("/api/v1/vehicles", tags=["Vehicles"])
