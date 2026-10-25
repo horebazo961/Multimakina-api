@@ -67,6 +67,8 @@ def get_db():
 def read_root():
     return {"status": "online", "system": "Multimakina Cloud API"}
 
+@app.get("/api/v1/vehicles", tags=["Vehicles"])
+@app.get("/api/v1/vehicles/", tags=["Vehicles"])
 @app.get("/vehicles", tags=["Vehicles"])
 @app.get("/vehicles/", tags=["Vehicles"])
 def get_vehicles(db: Session = Depends(get_db)):
@@ -86,6 +88,8 @@ def duplicate_vin_error() -> HTTPException:
     )
 
 
+@app.post("/api/v1/vehicles", tags=["Vehicles"])
+@app.post("/api/v1/vehicles/", tags=["Vehicles"])
 @app.post("/vehicles", tags=["Vehicles"])
 @app.post("/vehicles/", tags=["Vehicles"])
 def create_vehicle(payload: dict, db: Session = Depends(get_db)):
@@ -113,6 +117,7 @@ def create_vehicle(payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No se pudo registrar la unidad.") from error
 
 
+@app.patch("/api/v1/vehicles/{vehicle_id}", tags=["Vehicles"])
 @app.patch("/vehicles/{vehicle_id}", tags=["Vehicles"])
 def update_vehicle(vehicle_id: int, payload: dict, db: Session = Depends(get_db)):
     vehicle = db.query(VehicleModel).filter(VehicleModel.id == vehicle_id).first()

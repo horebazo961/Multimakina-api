@@ -13,7 +13,7 @@ export type Vehicle = {
 
 export type VehiclePayload = Omit<Vehicle, "id"> & { id?: number }
 
-const baseURL = (process.env.NEXT_PUBLIC_API_URL || "https://multimakina-api.onrender.com").replace(/\/$/, "")
+const baseURL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "")
 
 export const api: AxiosInstance = axios.create({
   baseURL,
@@ -52,11 +52,11 @@ export function apiErrorMessage(error: unknown) {
 }
 
 export async function listVehicles() {
-  const { data } = await api.get<Vehicle[]>("/vehicles/")
+  const { data } = await api.get<Vehicle[]>("/api/v1/vehicles/")
   return data
 }
 
 export async function createVehicle(payload: VehiclePayload) {
-  const { data } = await api.post<Vehicle>("/vehicles/", payload)
+  const { data } = await api.post<Vehicle>("/api/v1/vehicles/", payload)
   return data
 }

@@ -36,11 +36,11 @@ def duplicate_vin_response(error: IntegrityError) -> HTTPException:
     message = str(getattr(error, "orig", error)).lower()
     if "vin" not in message and "unique" not in message:
         return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": "INTEGRITY_ERROR", "message": "No se pudo guardar el expediente por un conflicto de integridad."},
         )
     return HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status.HTTP_409_CONFLICT,
         detail={"code": "DUPLICATE_VIN", "field": "vin", "message": DUPLICATE_VIN_MESSAGE},
     )
 
