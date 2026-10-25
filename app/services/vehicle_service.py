@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.models.vehicle import Vehicle
 from app.schemas.vehicle_schema import VehicleCreate, VehicleUpdate
 from app.services.pdf_service import PDFService

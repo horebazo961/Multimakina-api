@@ -5,7 +5,8 @@ Todos los endpoints están protegidos con JWT.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,22 @@ from app.services.vehicle_service import (
 from app.services.pdf_service import generate_vehicle_pdf
 from app.core.enums import TipoIntervencion
 
+DUPLICATE_VIN_MESSAGE = "El número VIN ingresado ya se encuentra registrado en el sistema."
+
+
+def duplicate_vin_response(error: IntegrityError) -> HTTPException:
+    message = str(getattr(error, "orig", error)).lower()
+    if "vin" not in message and "unique" not in message:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INTEGRITY_ERROR", "message": "No se pudo guardar el expediente por un conflicto de integridad."},
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": "DUPLICATE_VIN", "field": "vin", "message": DUPLICATE_VIN_MESSAGE},
+    )
+
+
 router = APIRouter(
     prefix="/vehicles",
     tags=["Vehicles"]
@@ -49,7 +66,11 @@ def create_new_vehicle(
     Crea un nuevo expediente técnico.
     El campo created_by se asigna automáticamente con el usuario autenticado.
     """
-    return create_vehicle(db, vehicle_data, current_user.id)
+    try:
+        return create_vehicle(db, vehicle_data, current_user.id)
+    except IntegrityError as error:
+        db.rollback()
+        raise duplicate_vin_response(error) from error
 
 
 @router.get(
@@ -113,7 +134,11 @@ def update_existing_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return update_vehicle(db, vehicle_id, vehicle_data)
+    try:
+        return update_vehicle(db, vehicle_id, vehicle_data)
+    except IntegrityError as error:
+        db.rollback()
+        raise duplicate_vin_response(error) from error
 
 
 @router.delete(
