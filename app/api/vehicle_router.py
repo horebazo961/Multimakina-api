@@ -5,7 +5,8 @@ Todos los endpoints están protegidos con JWT.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -49,7 +50,18 @@ def create_new_vehicle(
     Crea un nuevo expediente técnico.
     El campo created_by se asigna automáticamente con el usuario autenticado.
     """
-    return create_vehicle(db, vehicle_data, current_user.id)
+    try:
+        return create_vehicle(db, vehicle_data, current_user.id)
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "DUPLICATE_VIN",
+                "field": "vin",
+                "message": "El número VIN ingresado ya se encuentra registrado en el sistema.",
+            },
+        ) from error
 
 
 @router.get(
@@ -113,7 +125,18 @@ def update_existing_vehicle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return update_vehicle(db, vehicle_id, vehicle_data)
+    try:
+        return update_vehicle(db, vehicle_id, vehicle_data)
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "DUPLICATE_VIN",
+                "field": "vin",
+                "message": "El número VIN ingresado ya se encuentra registrado en el sistema.",
+            },
+        ) from error
 
 
 @router.delete(

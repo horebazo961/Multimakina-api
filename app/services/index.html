@@ -57,7 +57,8 @@
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1">Número VIN (Chasis)</label>
-                        <input type="text" id="vin" required placeholder="Ej. 1HGCR2F83HA..." class="w-full bg-corporate-dark border border-corporate-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-corporate-accent transition">
+                        <input type="text" id="vin" required maxlength="17" placeholder="Ej. 1HGCR2F83HA..." aria-describedby="vinError" class="w-full bg-corporate-dark border border-corporate-border rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-corporate-accent transition">
+                        <p id="vinError" class="hidden mt-1 text-xs text-red-400" role="alert"></p>
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-300 uppercase tracking-wider mb-1">Tipo de Mantenimiento</label>
@@ -121,27 +122,30 @@
     <script>
         const API_URL = "https://multimakina-api.onrender.com";
 
+        function showFormMessage(message, isError = false) {
+            const responseDiv = document.getElementById('formResponse');
+            responseDiv.className = `mt-4 text-xs font-mono ${isError ? 'text-red-400' : 'text-corporate-accent'}`;
+            responseDiv.textContent = message;
+        }
+
         async function loadVehicles() {
             const tbody = document.getElementById('vehicleTableBody');
             tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-corporate-accent font-mono animate-pulse">Sincronizando con base de datos en la nube...</td></tr>`;
-            
             try {
                 const response = await fetch(`${API_URL}/vehicles`);
                 if (!response.ok) throw new Error("Error al consultar la API");
                 const vehicles = await response.json();
-
                 if (!vehicles || vehicles.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-slate-500">No hay vehículos registrados en el sistema.</td></tr>`;
                     return;
                 }
-
                 tbody.innerHTML = vehicles.map(v => `
                     <tr class="hover:bg-corporate-slate/50 transition">
                         <td class="p-3 font-mono text-xs text-slate-400">#${v.id}</td>
                         <td class="p-3 font-semibold text-white">${v.brand} ${v.model}</td>
                         <td class="p-3 font-mono text-xs text-slate-400">${v.vin}</td>
                         <td class="p-3"><span class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-corporate-accent border border-emerald-800">${v.maintenance_type || 'Preventivo'}</span></td>
-                        <td class="p-3 text-xs text-slate-300">${v.taller_propietario}</td>
+                        <td class="p-3 text-xs text-slate-300">${v.taller_propietario || 'Taller Central'}</td>
                     </tr>
                 `).join('');
             } catch (error) {
@@ -151,17 +155,22 @@
 
         document.getElementById('vehicleForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const responseDiv = document.getElementById('formResponse');
-            
-            const payload = {
-                brand: document.getElementById('brand').value,
-                model: document.getElementById('model').value,
-                vin: document.getElementById('vin').value,
-                maintenance_type: document.getElementById('maintenance_type').value,
-                taller_propietario: document.getElementById('taller_propietario').value
-            };
+            const form = e.currentTarget;
+            const vinInput = document.getElementById('vin');
+            const vinError = document.getElementById('vinError');
+            const submitButton = form.querySelector('button[type="submit"]');
+            vinError.classList.add('hidden');
+            submitButton.disabled = true;
+            showFormMessage('Transmitiendo datos al clúster...');
 
-            responseDiv.innerHTML = "Transmitiendo datos al clúster...";
+            const payload = {
+                brand: document.getElementById('brand').value.trim(),
+                model: document.getElementById('model').value.trim(),
+                vin: vinInput.value.trim().toUpperCase(),
+                maintenance_type: document.getElementById('maintenance_type').value,
+                taller_propietario: document.getElementById('taller_propietario').value.trim()
+            };
+            vinInput.value = payload.vin;
 
             try {
                 const res = await fetch(`${API_URL}/vehicles`, {
@@ -169,19 +178,33 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
-                if (!res.ok) throw new Error("Fallo en la validación del backend");
-                const result = await res.json();
-                
-                responseDiv.innerHTML = `✔ ${result.message} (ID: ${result.id})`;
-                document.getElementById('vehicleForm').reset();
-                loadVehicles();
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const detail = result.detail;
+                    const message = typeof detail === 'object' ? detail.message : (detail || 'No se pudo registrar la unidad.');
+                    if (detail?.field === 'vin' || detail?.code === 'DUPLICATE_VIN') {
+                        vinError.textContent = message;
+                        vinError.classList.remove('hidden');
+                        vinInput.focus();
+                    }
+                    throw new Error(message);
+                }
+                showFormMessage(`Unidad registrada con éxito (ID: ${result.id})`);
+                form.reset();
+                await loadVehicles();
             } catch (err) {
-                responseDiv.innerHTML = `❌ Error al registrar: ${err.message}`;
+                showFormMessage(`Error al registrar: ${err.message}`, true);
+            } finally {
+                submitButton.disabled = false;
             }
         });
 
         loadVehicles();
+        // Mantiene la tabla sincronizada sin exigir recargas manuales.
+        const syncInterval = window.setInterval(() => {
+            if (!document.hidden) loadVehicles();
+        }, 15000);
+        window.addEventListener('beforeunload', () => window.clearInterval(syncInterval));
     </script>
 </body>
 </html>
