@@ -1,27 +1,22 @@
+"""
+Multimakina Cloud API
+Backend FastAPI limpio, listo para Render (Free) + Supabase (Free).
+"""
+
+import os
+from typing import Optional
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Column, Integer, String, create_engine, text
+from sqlalchemy import Column, Integer, String, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-import os
+from sqlalchemy.orm import Session
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./multimakina.db")
+from app.database import Base, engine, get_db
 
-# Orígenes explícitos para producción; los previews de Vercel se cubren con
-# allow_origin_regex sin abrir CORS a cualquier sitio.
-CORS_ORIGINS = [
-    origin.strip().rstrip("/")
-    for origin in os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-    if origin.strip()
-]
-
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# ---------------------------------------------------------------------------
+# Modelo
+# ---------------------------------------------------------------------------
 
 class VehicleModel(Base):
     __tablename__ = "vehicles"
@@ -34,48 +29,54 @@ class VehicleModel(Base):
     maintenance_type = Column(String, default="Preventivo")
     taller_propietario = Column(String, default="Taller Central")
 
-# Crear tablas y asegurar columnas nuevas en Supabase
-Base.metadata.create_all(bind=engine)
-with engine.connect() as connection:
-    try:
-        connection.execute(text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS maintenance_type VARCHAR DEFAULT 'Preventivo';"))
-        connection.execute(text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS taller_propietario VARCHAR DEFAULT 'Taller Central';"))
-        connection.commit()
-    except Exception:
-        pass
 
-app = FastAPI(title="Multimakina Cloud Secure API", version="2.5")
+# Crear tablas al arrancar (seguro en Postgres / Supabase)
+Base.metadata.create_all(bind=engine)
+
+# Asegurar columnas nuevas si la tabla ya existía
+try:
+    with engine.connect() as connection:
+        connection.execute(
+            text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS maintenance_type VARCHAR DEFAULT 'Preventivo'")
+        )
+        connection.execute(
+            text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS taller_propietario VARCHAR DEFAULT 'Taller Central'")
+        )
+        connection.commit()
+except Exception:
+    pass
+
+# ---------------------------------------------------------------------------
+# App + CORS
+# ---------------------------------------------------------------------------
+
+CORS_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
+
+app = FastAPI(
+    title="Multimakina Cloud API",
+    version="3.0.0",
+    description="API de gestión vehicular para talleres - Multimakina",
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    # Autoriza únicamente dominios Vercel y los orígenes explícitos configurados.
     allow_origin_regex=r"https://[a-zA-Z0-9-]+(?:-[a-zA-Z0-9-]+)*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/")
-def read_root():
-    return {"status": "online", "system": "Multimakina Cloud API"}
-
-@app.get("/api/v1/vehicles", tags=["Vehicles"])
-@app.get("/api/v1/vehicles/", tags=["Vehicles"])
-@app.get("/vehicles", tags=["Vehicles"])
-@app.get("/vehicles/", tags=["Vehicles"])
-def get_vehicles(db: Session = Depends(get_db)):
-    try:
-        return db.query(VehicleModel).all()
-    except Exception:
-        return []
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def duplicate_vin_error() -> HTTPException:
     return HTTPException(
@@ -88,28 +89,47 @@ def duplicate_vin_error() -> HTTPException:
     )
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/")
+def health():
+    return {"status": "online", "system": "Multimakina Cloud API", "version": "3.0.0"}
+
+
+@app.get("/api/v1/vehicles", tags=["Vehicles"])
+@app.get("/api/v1/vehicles/", tags=["Vehicles"])
+def list_vehicles(db: Session = Depends(get_db)):
+    try:
+        return db.query(VehicleModel).order_by(VehicleModel.id.desc()).all()
+    except Exception:
+        return []
+
+
 @app.post("/api/v1/vehicles", tags=["Vehicles"])
 @app.post("/api/v1/vehicles/", tags=["Vehicles"])
-@app.post("/vehicles", tags=["Vehicles"])
-@app.post("/vehicles/", tags=["Vehicles"])
 def create_vehicle(payload: dict, db: Session = Depends(get_db)):
     vin = (payload.get("vin") or "").strip().upper()
+    if not vin:
+        raise HTTPException(status_code=400, detail="VIN es obligatorio.")
+
     if db.query(VehicleModel).filter(VehicleModel.vin == vin).first():
         raise duplicate_vin_error()
 
-    nuevo_vehiculo = VehicleModel(
-        brand=payload.get("brand"),
-        model=payload.get("model"),
+    vehicle = VehicleModel(
+        brand=(payload.get("brand") or "").strip(),
+        model=(payload.get("model") or "").strip(),
         vin=vin,
-        status=payload.get("status", "Diagnóstico"),
-        maintenance_type=payload.get("maintenance_type", "Preventivo"),
-        taller_propietario=payload.get("taller_propietario", "Taller Central"),
+        status=payload.get("status") or "Diagnóstico",
+        maintenance_type=payload.get("maintenance_type") or "Preventivo",
+        taller_propietario=payload.get("taller_propietario") or "Taller Central",
     )
     try:
-        db.add(nuevo_vehiculo)
+        db.add(vehicle)
         db.commit()
-        db.refresh(nuevo_vehiculo)
-        return {"message": "Unidad registrada con éxito", "id": nuevo_vehiculo.id}
+        db.refresh(vehicle)
+        return {"message": "Unidad registrada con éxito", "id": vehicle.id}
     except IntegrityError as error:
         db.rollback()
         if "vin" in str(error.orig).lower() or "unique" in str(error.orig).lower():
@@ -118,23 +138,26 @@ def create_vehicle(payload: dict, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/v1/vehicles/{vehicle_id}", tags=["Vehicles"])
-@app.patch("/vehicles/{vehicle_id}", tags=["Vehicles"])
 def update_vehicle(vehicle_id: int, payload: dict, db: Session = Depends(get_db)):
     vehicle = db.query(VehicleModel).filter(VehicleModel.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehículo no encontrado en el sistema.")
 
     if "vin" in payload:
-        payload["vin"] = (payload["vin"] or "").strip().upper()
-        duplicate = db.query(VehicleModel).filter(
-            VehicleModel.vin == payload["vin"], VehicleModel.id != vehicle_id
-        ).first()
+        new_vin = (payload["vin"] or "").strip().upper()
+        payload["vin"] = new_vin
+        duplicate = (
+            db.query(VehicleModel)
+            .filter(VehicleModel.vin == new_vin, VehicleModel.id != vehicle_id)
+            .first()
+        )
         if duplicate:
             raise duplicate_vin_error()
 
     for field in ("brand", "model", "vin", "status", "maintenance_type", "taller_propietario"):
         if field in payload:
             setattr(vehicle, field, payload[field])
+
     try:
         db.commit()
         db.refresh(vehicle)
