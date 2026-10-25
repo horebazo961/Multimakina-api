@@ -35,9 +35,7 @@ import type {
   VehiclePayload,
 } from "@/lib/api"
 
-const TIME_ZONE = "America/Guayaayaquil".replace(
-  "Guayaayaquil",
-  "Guayaquil"
+const TIME_ZONE = "America/Guayaquil"
 )
 
 const INITIAL_FORM = {
