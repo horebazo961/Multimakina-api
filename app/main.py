@@ -6,10 +6,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import os
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql://postgres.ditabcbswzrwmkeudspu:CONTRASEÑA_REAL@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./multimakina.db")
+
+# Orígenes explícitos para producción; los previews de Vercel se cubren con
+# allow_origin_regex sin abrir CORS a cualquier sitio.
+CORS_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -40,10 +45,12 @@ app = FastAPI(title="Multimakina Cloud Secure API", version="2.5")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
+    # Autoriza únicamente dominios Vercel y los orígenes explícitos configurados.
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+(?:-[a-zA-Z0-9-]+)*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 def get_db():

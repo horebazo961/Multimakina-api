@@ -120,7 +120,11 @@
     </footer>
 
     <script>
-        const API_URL = "https://multimakina-api.onrender.com";
+        // En Vercel puede definirse window.MULTIMAKINA_API_URL antes de este script.
+        // En el mismo dominio usamos una ruta relativa y simplificamos CORS.
+        const configuredApiUrl = window.MULTIMAKINA_API_URL || "https://multimakina-api.onrender.com";
+        const API_URL = configuredApiUrl.replace(/\/$/, "");
+        const REQUEST_TIMEOUT_MS = 45000; // tolera cold starts del plan gratuito de Render
 
         function showFormMessage(message, isError = false) {
             const responseDiv = document.getElementById('formResponse');
@@ -128,11 +132,30 @@
             responseDiv.textContent = message;
         }
 
+        async function apiFetch(path, options = {}) {
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+            try {
+                return await fetch(`${API_URL}${path}`, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: { 'Accept': 'application/json', ...(options.headers || {}) }
+                });
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    throw new Error('El backend tardó demasiado en responder. Render puede estar iniciando el servicio.');
+                }
+                throw new Error('No fue posible conectar con el backend en Render.');
+            } finally {
+                window.clearTimeout(timeout);
+            }
+        }
+
         async function loadVehicles() {
             const tbody = document.getElementById('vehicleTableBody');
             tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-corporate-accent font-mono animate-pulse">Sincronizando con base de datos en la nube...</td></tr>`;
             try {
-                const response = await fetch(`${API_URL}/vehicles`);
+                const response = await apiFetch('/vehicles');
                 if (!response.ok) throw new Error("Error al consultar la API");
                 const vehicles = await response.json();
                 if (!vehicles || vehicles.length === 0) {
@@ -173,7 +196,7 @@
             vinInput.value = payload.vin;
 
             try {
-                const res = await fetch(`${API_URL}/vehicles`, {
+                const res = await apiFetch('/vehicles', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
