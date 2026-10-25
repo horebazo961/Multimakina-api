@@ -9,7 +9,7 @@ import logging
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
@@ -32,7 +32,7 @@ class VehicleModel(Base):
     taller_propietario = Column(String, default="Taller Central")
 
 
-# Crear tablas al arrancar (no tumba el proceso si la DB no responde)
+# Crear tablas al arrancar
 try:
     Base.metadata.create_all(bind=engine)
     with engine.connect() as connection:
@@ -43,8 +43,9 @@ try:
             text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS taller_propietario VARCHAR DEFAULT 'Taller Central'")
         )
         connection.commit()
+    logger.info("Tablas verificadas/creadas correctamente")
 except Exception as e:
-    logger.warning("No se pudieron crear/actualizar tablas al inicio: %s", e)
+    logger.error("No se pudieron crear/actualizar tablas al inicio: %s", e)
 
 # ---------------------------------------------------------------------------
 # App + CORS
@@ -61,7 +62,7 @@ CORS_ORIGINS = [
 
 app = FastAPI(
     title="Multimakina Cloud API",
-    version="3.0.1",
+    version="3.0.2",
     description="API de gestión vehicular para talleres - Multimakina",
 )
 
@@ -74,9 +75,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def duplicate_vin_error() -> HTTPException:
     return HTTPException(
@@ -89,13 +87,23 @@ def duplicate_vin_error() -> HTTPException:
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
 @app.get("/")
 def health():
-    return {"status": "online", "system": "Multimakina Cloud API", "version": "3.0.1"}
+    db_ok = False
+    db_error = None
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as e:
+        db_error = str(e)
+    return {
+        "status": "online",
+        "system": "Multimakina Cloud API",
+        "version": "3.0.2",
+        "database": "ok" if db_ok else "error",
+        "database_error": db_error,
+    }
 
 
 @app.get("/api/v1/vehicles", tags=["Vehicles"])
@@ -103,8 +111,8 @@ def health():
 def list_vehicles(db: Session = Depends(get_db)):
     try:
         return db.query(VehicleModel).order_by(VehicleModel.id.desc()).all()
-    except Exception:
-        return []
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}") from e
 
 
 @app.post("/api/v1/vehicles", tags=["Vehicles"])
@@ -114,56 +122,67 @@ def create_vehicle(payload: dict, db: Session = Depends(get_db)):
     if not vin:
         raise HTTPException(status_code=400, detail="VIN es obligatorio.")
 
-    if db.query(VehicleModel).filter(VehicleModel.vin == vin).first():
-        raise duplicate_vin_error()
-
-    vehicle = VehicleModel(
-        brand=(payload.get("brand") or "").strip(),
-        model=(payload.get("model") or "").strip(),
-        vin=vin,
-        status=payload.get("status") or "Diagnóstico",
-        maintenance_type=payload.get("maintenance_type") or "Preventivo",
-        taller_propietario=payload.get("taller_propietario") or "Taller Central",
-    )
     try:
+        exists = db.query(VehicleModel).filter(VehicleModel.vin == vin).first()
+        if exists:
+            raise duplicate_vin_error()
+
+        vehicle = VehicleModel(
+            brand=(payload.get("brand") or "").strip(),
+            model=(payload.get("model") or "").strip(),
+            vin=vin,
+            status=payload.get("status") or "Diagnóstico",
+            maintenance_type=payload.get("maintenance_type") or "Preventivo",
+            taller_propietario=payload.get("taller_propietario") or "Taller Central",
+        )
         db.add(vehicle)
         db.commit()
         db.refresh(vehicle)
         return {"message": "Unidad registrada con éxito", "id": vehicle.id}
+    except HTTPException:
+        raise
     except IntegrityError as error:
         db.rollback()
         if "vin" in str(error.orig).lower() or "unique" in str(error.orig).lower():
             raise duplicate_vin_error() from error
-        raise HTTPException(status_code=400, detail="No se pudo registrar la unidad.") from error
+        raise HTTPException(status_code=400, detail=f"No se pudo registrar: {str(error.orig)}") from error
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}") from e
 
 
 @app.patch("/api/v1/vehicles/{vehicle_id}", tags=["Vehicles"])
 def update_vehicle(vehicle_id: int, payload: dict, db: Session = Depends(get_db)):
-    vehicle = db.query(VehicleModel).filter(VehicleModel.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehículo no encontrado en el sistema.")
-
-    if "vin" in payload:
-        new_vin = (payload["vin"] or "").strip().upper()
-        payload["vin"] = new_vin
-        duplicate = (
-            db.query(VehicleModel)
-            .filter(VehicleModel.vin == new_vin, VehicleModel.id != vehicle_id)
-            .first()
-        )
-        if duplicate:
-            raise duplicate_vin_error()
-
-    for field in ("brand", "model", "vin", "status", "maintenance_type", "taller_propietario"):
-        if field in payload:
-            setattr(vehicle, field, payload[field])
-
     try:
+        vehicle = db.query(VehicleModel).filter(VehicleModel.id == vehicle_id).first()
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="Vehículo no encontrado en el sistema.")
+
+        if "vin" in payload:
+            new_vin = (payload["vin"] or "").strip().upper()
+            payload["vin"] = new_vin
+            duplicate = (
+                db.query(VehicleModel)
+                .filter(VehicleModel.vin == new_vin, VehicleModel.id != vehicle_id)
+                .first()
+            )
+            if duplicate:
+                raise duplicate_vin_error()
+
+        for field in ("brand", "model", "vin", "status", "maintenance_type", "taller_propietario"):
+            if field in payload:
+                setattr(vehicle, field, payload[field])
+
         db.commit()
         db.refresh(vehicle)
         return vehicle
+    except HTTPException:
+        raise
     except IntegrityError as error:
         db.rollback()
         if "vin" in str(error.orig).lower() or "unique" in str(error.orig).lower():
             raise duplicate_vin_error() from error
-        raise HTTPException(status_code=400, detail="No se pudo actualizar la unidad.") from error
+        raise HTTPException(status_code=400, detail=str(error.orig)) from error
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}") from e
