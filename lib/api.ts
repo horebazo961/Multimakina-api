@@ -35,6 +35,12 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
   return Promise.reject(error)
 })
 
+export function apiErrorCode(error: unknown) {
+  const axiosError = error as AxiosError<{ detail?: { code?: string; message?: string } | string }>
+  const detail = axiosError.response?.data?.detail
+  return typeof detail === "object" ? detail?.code : undefined
+}
+
 export function apiErrorMessage(error: unknown) {
   const axiosError = error as AxiosError<{ detail?: { message?: string } | string }>
   const detail = axiosError.response?.data?.detail

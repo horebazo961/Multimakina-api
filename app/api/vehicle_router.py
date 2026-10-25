@@ -29,6 +29,22 @@ from app.services.vehicle_service import (
 from app.services.pdf_service import generate_vehicle_pdf
 from app.core.enums import TipoIntervencion
 
+DUPLICATE_VIN_MESSAGE = "El número VIN ingresado ya se encuentra registrado en el sistema."
+
+
+def duplicate_vin_response(error: IntegrityError) -> HTTPException:
+    message = str(getattr(error, "orig", error)).lower()
+    if "vin" not in message and "unique" not in message:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "INTEGRITY_ERROR", "message": "No se pudo guardar el expediente por un conflicto de integridad."},
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "DUPLICATE_VIN", "field": "vin", "message": DUPLICATE_VIN_MESSAGE},
+    )
+
+
 router = APIRouter(
     prefix="/vehicles",
     tags=["Vehicles"]
@@ -54,14 +70,7 @@ def create_new_vehicle(
         return create_vehicle(db, vehicle_data, current_user.id)
     except IntegrityError as error:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "DUPLICATE_VIN",
-                "field": "vin",
-                "message": "El número VIN ingresado ya se encuentra registrado en el sistema.",
-            },
-        ) from error
+        raise duplicate_vin_response(error) from error
 
 
 @router.get(
@@ -129,14 +138,7 @@ def update_existing_vehicle(
         return update_vehicle(db, vehicle_id, vehicle_data)
     except IntegrityError as error:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "DUPLICATE_VIN",
-                "field": "vin",
-                "message": "El número VIN ingresado ya se encuentra registrado en el sistema.",
-            },
-        ) from error
+        raise duplicate_vin_response(error) from error
 
 
 @router.delete(
