@@ -1,15 +1,24 @@
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-# URL utilizando el Session Pooler de Supabase en el puerto 6543
-DEFAULT_DATABASE_URL = "postgresql://postgres.ditabcbswzrwmkeudspu:k9Navzh42qmeX6-@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+# Never hardcode credentials. DATABASE_URL must come from environment variables.
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL)
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is required. "
+        "Example: postgresql://user:password@host:6543/postgres"
+    )
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 def get_db():
     db = SessionLocal()
