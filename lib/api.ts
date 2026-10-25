@@ -1,62 +1,198 @@
-import axios, { AxiosError, AxiosInstance } from "axios"
+
+import axios, {
+  AxiosError,
+  AxiosInstance,
+} from "axios"
 
 export type Vehicle = {
   id: number
   brand: string
   model: string
   vin: string
+  status?: string | null
+  maintenance_type?: string | null
+  taller_propietario?: string | null
+  dtc_codes?: string | string[] | null
+  created_at?: string | null
+}
+
+export type VehiclePayload = {
+  brand: string
+  model: string
+  vin: string
   status?: string
   maintenance_type?: string
   taller_propietario?: string
-  dtc_codes?: string | null
 }
 
-export type VehiclePayload = Omit<Vehicle, "id"> & { id?: number }
+type ApiErrorBody = {
+  detail?: string | {
+    code?: string
+    message?: string
+  }
+}
 
-const baseURL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "")
+type RetryableRequest = {
+  _retry?: number
+}
+
+const configuredBaseURL =
+  process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, "")
+
+const isConfigured = Boolean(configuredBaseURL)
 
 export const api: AxiosInstance = axios.create({
-  baseURL,
-  timeout: 45_000,
-  headers: { Accept: "application/json", "Content-Type": "application/json" },
+  ...(configuredBaseURL
+    ? { baseURL: configuredBaseURL }
+    : {}),
+  timeout: 20_000,
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
 })
 
-function isRetryable(error: AxiosError) {
-  return !error.response || error.code === "ECONNABORTED" || error.response.status >= 500
-}
+function isRetryableRead(error: AxiosError): boolean {
+  const method = (error.config?.method || "get").toLowerCase()
 
-api.interceptors.response.use(undefined, async (error: AxiosError) => {
-  const config = error.config as (typeof error.config & { _retry?: number }) | undefined
-  if (config && isRetryable(error) && (config._retry || 0) < 2) {
-    config._retry = (config._retry || 0) + 1
-    await new Promise((resolve) => setTimeout(resolve, 800 * config._retry!))
-    return api(config)
+  if (method !== "get") {
+    return false
   }
-  return Promise.reject(error)
-})
 
-export function apiErrorCode(error: unknown) {
-  const axiosError = error as AxiosError<{ detail?: { code?: string; message?: string } | string }>
-  const detail = axiosError.response?.data?.detail
-  return typeof detail === "object" ? detail?.code : undefined
+  if (!error.response) {
+    return true
+  }
+
+  return error.response.status >= 500
 }
 
-export function apiErrorMessage(error: unknown) {
-  const axiosError = error as AxiosError<{ detail?: { message?: string } | string }>
-  const detail = axiosError.response?.data?.detail
-  if (typeof detail === "object" && detail?.message) return detail.message
-  if (typeof detail === "string") return detail
-  if (axiosError.code === "ECONNABORTED") return "El backend está tardando en despertar. Render puede estar iniciando el servicio."
-  if (!axiosError.response) return "No fue posible conectar con Render. Verifica NEXT_PUBLIC_API_URL y CORS."
-  return "Ocurrió un error inesperado al comunicarse con el backend."
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as
+      | (typeof error.config & RetryableRequest)
+      | undefined
+
+    if (
+      config &&
+      isRetryableRead(error) &&
+      (config._retry || 0) < 2
+    ) {
+      config._retry = (config._retry || 0) + 1
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 500 * config._retry!)
+      })
+
+      return api(config)
+    }
+
+    return Promise.reject(error)
+  }
+)
+
+export function apiErrorCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError<ApiErrorBody>(error)) {
+    return undefined
+  }
+
+  const detail = error.response?.data?.detail
+
+  if (typeof detail === "object" && detail !== null) {
+    return detail.code
+  }
+
+  return undefined
 }
 
-export async function listVehicles() {
-  const { data } = await api.get<Vehicle[]>("/api/v1/vehicles/")
+export function apiErrorMessage(error: unknown): string {
+  if (!isConfigured) {
+    return (
+      "La API no está configurada. Define NEXT_PUBLIC_API_URL " +
+      "en las variables de entorno del despliegue."
+    )
+  }
+
+  if (!axios.isAxiosError<ApiErrorBody>(error)) {
+    return "No se pudo completar la operación. Intenta nuevamente."
+  }
+
+  const status = error.response?.status
+
+  if (error.code === "ECONNABORTED") {
+    return "La API tardó demasiado en responder. Intenta sincronizar de nuevo."
+  }
+
+  if (!error.response) {
+    return (
+      "No fue posible conectar con la API. " +
+      "Verifica la disponibilidad del servidor y la configuración CORS."
+    )
+  }
+
+  if (status === 400 || status === 422) {
+    return "Los datos enviados no cumplen las validaciones del servidor."
+  }
+
+  if (status === 401) {
+    return "La sesión o las credenciales no son válidas. Inicia sesión nuevamente."
+  }
+
+  if (status === 403) {
+    return "No tienes permisos para realizar esta operación."
+  }
+
+  if (status === 404) {
+    return "El recurso solicitado no está disponible en la API."
+  }
+
+  if (status === 409) {
+    return "Existe un conflicto con el registro. Comprueba si ya fue ingresado."
+  }
+
+  if (status === 429) {
+    return "Se han realizado demasiadas solicitudes. Espera antes de reintentar."
+  }
+
+  if (status && status >= 500) {
+    return (
+      "La API encontró un error interno. " +
+      "El detalle técnico debe revisarse en los registros del servidor."
+    )
+  }
+
+  return "La solicitud no pudo completarse. Revisa los datos y los permisos."
+}
+
+function ensureApiConfigured(): void {
+  if (!isConfigured) {
+    throw new Error("API_NOT_CONFIGURED")
+  }
+}
+
+export async function listVehicles(): Promise<Vehicle[]> {
+  ensureApiConfigured()
+
+  const { data } = await api.get<Vehicle[]>(
+    "/api/v1/vehicles/"
+  )
+
+  if (!Array.isArray(data)) {
+    throw new Error("INVALID_VEHICLE_RESPONSE")
+  }
+
   return data
 }
 
-export async function createVehicle(payload: VehiclePayload) {
-  const { data } = await api.post<Vehicle>("/api/v1/vehicles/", payload)
+export async function createVehicle(
+  payload: VehiclePayload
+): Promise<Vehicle> {
+  ensureApiConfigured()
+
+  const { data } = await api.post<Vehicle>(
+    "/api/v1/vehicles/",
+    payload
+  )
+
   return data
 }
