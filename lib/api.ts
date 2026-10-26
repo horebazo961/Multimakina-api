@@ -5,20 +5,54 @@ export type Vehicle = {
   brand: string
   model: string
   vin: string
+  internal_code?: string | null
+  category?: string
   status?: string
   maintenance_type?: string
   taller_propietario?: string
   dtc_codes?: string | null
 }
 
-export type VehiclePayload = Omit<Vehicle, "id"> & { id?: number }
+export type VehiclePayload = {
+  brand?: string
+  model?: string
+  vin?: string
+  internal_code?: string
+  category?: string
+  status?: string
+  maintenance_type?: string
+  taller_propietario?: string
+  escuderia?: string
+}
+
+export const FLEET_STATUSES = [
+  "En box",
+  "En preparación",
+  "Listo para pista",
+  "En pista",
+  "Fuera de servicio",
+] as const
+
+export const FLEET_CATEGORIES = ["Rental", "Competición", "Escuela", "Otro"] as const
+
+export const MAINTENANCE_TYPES = [
+  "Preventivo",
+  "Correctivo",
+  "Diagnóstico Electrónico",
+  "Setup de carrera",
+] as const
 
 const baseURL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "")
+const writeKey = (process.env.NEXT_PUBLIC_API_WRITE_KEY || "").trim()
 
 export const api: AxiosInstance = axios.create({
   baseURL,
   timeout: 45_000,
-  headers: { Accept: "application/json", "Content-Type": "application/json" },
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...(writeKey ? { "X-API-Key": writeKey } : {}),
+  },
 })
 
 function isRetryable(error: AxiosError) {
@@ -46,13 +80,16 @@ export function apiErrorMessage(error: unknown) {
   const detail = axiosError.response?.data?.detail
   if (typeof detail === "object" && detail?.message) return detail.message
   if (typeof detail === "string") return detail
+  if (axiosError.response?.status === 401) {
+    return "No autorizado para modificar la flota. Revisa la clave de escritura (API key)."
+  }
   if (axiosError.code === "ECONNABORTED") {
-    return "El backend está tardando en responder. Si usas Render Free, el servicio puede estar despertando (cold start)."
+    return "El backend está tardando. En Render Free puede estar despertando (cold start ~50s)."
   }
   if (!axiosError.response) {
-    return "No fue posible conectar con el backend. Verifica NEXT_PUBLIC_API_URL y la configuración de CORS."
+    return "No fue posible conectar con el backend. Verifica NEXT_PUBLIC_API_URL y CORS."
   }
-  return "Ocurrió un error inesperado al comunicarse con el backend."
+  return "Ocurrió un error al comunicarse con el backend."
 }
 
 export async function listVehicles() {
@@ -61,6 +98,14 @@ export async function listVehicles() {
 }
 
 export async function createVehicle(payload: VehiclePayload) {
-  const { data } = await api.post<{ message: string; id: number }>("/api/v1/vehicles/", payload)
+  const { data } = await api.post<{ message: string; id: number; status?: string; internal_code?: string }>(
+    "/api/v1/vehicles/",
+    payload,
+  )
+  return data
+}
+
+export async function updateVehicle(id: number, payload: VehiclePayload) {
+  const { data } = await api.patch<Vehicle>(`/api/v1/vehicles/${id}`, payload)
   return data
 }
